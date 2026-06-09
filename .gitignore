@@ -28,5 +28,18 @@ worktrees/
 .idea/
 .vscode/
 
-# Private planning docs — never publish
+# Private / ScientAI planning docs — never publish (belt-and-suspenders).
+# Keeps these out of git no matter where a copy lands in the tree.
 private/
+sections/
+PLATFORM_ANALYSIS.md
+AGENT_ARCHITECTURE.md
+AGENT_TEAM_STRATEGY.md
+JIRA_AGENT_DESIGN.md
+SECURE_BROKER_AND_QUEUE.md
+SETUP_AND_READINESS.md
+DELEGATE_TO_CLAUDE_CODE.md
+ARCHITECTURE_DIAGRAM_v2.md
+*ScientAI*
+*scientai*
+*SCIENTAI*
