@@ -4,7 +4,7 @@
 
 **An autonomous, secure coding agent that turns issue-tracker tickets into reviewed pull requests — driven by the Claude CLI, with a Secrets Broker so the model never holds a key.**
 
-[![CI](https://github.com/REPLACE_ME/quartermaster/actions/workflows/ci.yml/badge.svg)](https://github.com/REPLACE_ME/quartermaster/actions/workflows/ci.yml)
+[![CI](https://github.com/BEKOhub/quartermaster/actions/workflows/ci.yml/badge.svg)](https://github.com/BEKOhub/quartermaster/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED.svg)](docker-compose.yml)
@@ -46,7 +46,7 @@ deterministic, zero-token control plane.
 ## Quickstart (no accounts, no API keys)
 
 ```bash
-git clone https://github.com/REPLACE_ME/quartermaster.git
+git clone https://github.com/BEKOhub/quartermaster.git
 cd quartermaster
 cp example.env .env            # MOCK_MODE=true is the default
 docker compose up --build

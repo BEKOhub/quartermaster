@@ -34,5 +34,5 @@ Initial public release.
 - Full mock mode so the entire loop runs locally with no accounts or API keys.
 - 42 unit tests and a Docker/Compose stack.
 
-[Unreleased]: https://github.com/REPLACE_ME/quartermaster/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/REPLACE_ME/quartermaster/releases/tag/v0.1.0
+[Unreleased]: https://github.com/BEKOhub/quartermaster/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/BEKOhub/quartermaster/releases/tag/v0.1.0
