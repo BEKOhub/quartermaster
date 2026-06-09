@@ -6,7 +6,7 @@ docs, tests, connectors, and features.
 ## Getting started
 
 ```bash
-git clone https://github.com/REPLACE_ME/quartermaster.git
+git clone https://github.com/BEKOhub/quartermaster.git
 cd quartermaster
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
