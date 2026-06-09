@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quartermaster — Board</title>
+<style>
+  :root {
+    --bg:#0f1117; --panel:#171a23; --panel2:#1e222e; --line:#2a2f3d;
+    --txt:#e6e9ef; --muted:#8b93a7; --accent:#6c8cff;
+    --gray:#5b6373; --blue:#3b82f6; --indigo:#6366f1; --amber:#f59e0b;
+    --purple:#a855f7; --red:#ef4444; --green:#22c55e;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+    font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { display:flex; align-items:center; gap:14px; padding:14px 20px;
+    border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:17px; margin:0; font-weight:650; letter-spacing:.2px; }
+  .badge { font-size:11px; padding:3px 9px; border-radius:999px; font-weight:600; }
+  .badge.mock { background:#3a2d12; color:#ffcf7a; }
+  .badge.live { background:#10331f; color:#7ef0a8; }
+  .spacer { flex:1; }
+  .refresh { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(34,197,94,.5);} 70%{box-shadow:0 0 0 7px rgba(34,197,94,0);} 100%{box-shadow:0 0 0 0 rgba(34,197,94,0);} }
+
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; padding:16px 20px 6px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .card .label { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); }
+  .card .big { font-size:26px; font-weight:700; margin-top:6px; }
+  .card .sub { font-size:12px; color:var(--muted); margin-top:2px; }
+  .bar { height:7px; background:var(--panel2); border-radius:6px; margin-top:10px; overflow:hidden; }
+  .bar > span { display:block; height:100%; border-radius:6px; background:var(--green); transition:width .4s; }
+  .mini { display:flex; gap:16px; margin-top:8px; }
+  .mini div b { font-size:19px; } .mini div { font-size:11px; color:var(--muted); }
+  .attn { color:var(--amber); }
+
+  .layout { display:flex; gap:0; align-items:flex-start; }
+  .board { display:flex; gap:12px; padding:6px 20px 24px; overflow-x:auto; align-items:flex-start; flex:1; }
+  .col { background:var(--panel); border:1px solid var(--line); border-radius:12px; min-width:240px; max-width:300px; flex:1 0 240px; }
+  .col h2 { font-size:12px; text-transform:uppercase; letter-spacing:.5px; margin:0; padding:12px 14px;
+    display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--line); }
+  .col h2 .cnt { margin-left:auto; background:var(--panel2); color:var(--muted); border-radius:999px; padding:1px 9px; font-size:11px; }
+  .col .body { padding:10px; display:flex; flex-direction:column; gap:9px; min-height:30px; }
+  .swatch { width:9px; height:9px; border-radius:3px; }
+
+  .ticket { background:var(--panel2); border:1px solid var(--line); border-left:3px solid var(--gray);
+    border-radius:9px; padding:10px 11px; cursor:pointer; transition:border-color .15s, transform .05s; }
+  .ticket:hover { border-color:var(--accent); }
+  .ticket:active { transform:scale(.99); }
+  .ticket .top { display:flex; align-items:center; gap:8px; }
+  .ticket .key { font-weight:700; font-size:12px; color:var(--accent); }
+  .ticket .cost { margin-left:auto; font-size:11px; color:var(--green); font-weight:600; }
+  .ticket .sum { margin-top:6px; font-size:13px; }
+  .ticket .meta { margin-top:8px; display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+  .chip { font-size:10px; padding:2px 7px; border-radius:999px; background:#262b3a; color:var(--muted); }
+  .chip.arch { background:#3a2d12; color:#ffcf7a; }
+  .chip.assignee { background:#202a3f; color:#9db4ff; }
+  .prio { width:7px; height:7px; border-radius:50%; }
+  .empty { color:var(--muted); font-size:12px; text-align:center; padding:10px 0; }
+  .act { margin-top:9px; }
+  .act button { width:100%; border:1px solid var(--line); background:#222838; color:var(--txt);
+    border-radius:7px; padding:6px; font-size:12px; font-weight:600; cursor:pointer; }
+  .act button:hover { border-color:var(--accent); background:#27304a; }
+  .act.go button { color:#9db4ff; } .act.ok button { color:#7ef0a8; }
+
+  .side { width:280px; flex:0 0 280px; padding:6px 20px 24px 0; display:flex; flex-direction:column; gap:12px; }
+  .panel-box { background:var(--panel); border:1px solid var(--line); border-radius:12px; }
+  .panel-box h2 { font-size:12px; text-transform:uppercase; letter-spacing:.5px; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+  .feed { max-height:240px; overflow:auto; font-size:12px; }
+  .feed .row { padding:7px 14px; border-bottom:1px solid #20242f; }
+  .feed .row:last-child { border-bottom:none; }
+  .feed .k { color:var(--accent); font-weight:600; }
+
+  .audit { margin:0 20px 28px; background:var(--panel); border:1px solid var(--line); border-radius:12px; }
+  .audit h2 { font-size:12px; text-transform:uppercase; letter-spacing:.5px; margin:0; padding:12px 14px; border-bottom:1px solid var(--line); }
+  .audit .rows { max-height:220px; overflow:auto; font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+  .audit .row { display:flex; gap:10px; padding:6px 14px; border-bottom:1px solid #20242f; }
+  .audit .row:last-child { border-bottom:none; }
+  .audit .t { color:var(--muted); white-space:nowrap; }
+  .audit .op { color:var(--accent); white-space:nowrap; }
+  .audit .ok { color:var(--green); } .audit .no { color:var(--red); font-weight:700; }
+  .audit .res { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* drill-down modal */
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:20; }
+  .overlay.open { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--line); border-radius:14px; width:min(760px,92vw); max-height:84vh; overflow:auto; }
+  .modal .mh { display:flex; align-items:center; gap:10px; padding:16px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--panel); }
+  .modal .mh .key { color:var(--accent); font-weight:700; }
+  .modal .mh .x { margin-left:auto; cursor:pointer; color:var(--muted); font-size:20px; }
+  .tl { padding:8px 18px 18px; }
+  .stage { display:flex; gap:12px; padding:10px 0; border-bottom:1px solid #20242f; align-items:baseline; }
+  .stage .nm { width:90px; font-weight:600; text-transform:capitalize; }
+  .stage .vd { font-size:11px; padding:1px 8px; border-radius:999px; background:#262b3a; color:var(--muted); }
+  .stage .vd.pass,.stage .vd.pr_opened,.stage .vd.clean,.stage .vd.done,.stage .vd.ok { background:#10331f; color:#7ef0a8; }
+  .stage .vd.fail,.stage .vd.blocked { background:#3a1414; color:#ff9a9a; }
+  .stage .vd.needs_decision { background:#3a2d12; color:#ffcf7a; }
+  .stage .gr { margin-left:auto; color:var(--muted); font-size:12px; white-space:nowrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛰️ Quartermaster</h1>
+  <span id="mode" class="badge mock">MOCK</span>
+  <div class="spacer"></div>
+  <div class="refresh"><span class="dot"></span><span id="ts">connecting…</span></div>
+</header>
+
+<section class="cards" id="cards"></section>
+<div class="layout">
+  <div class="board" id="board"></div>
+  <aside class="side">
+    <div class="panel-box">
+      <h2>🔔 Notifications — needs you</h2>
+      <div class="feed" id="notes"></div>
+    </div>
+  </aside>
+</div>
+<section class="audit">
+  <h2>Audit feed — every brokered external call</h2>
+  <div class="rows" id="audit"></div>
+</section>
+
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="mh"><span class="key" id="m-key"></span><span id="m-sum"></span>
+      <span class="x" onclick="closeModal()">×</span></div>
+    <div class="tl" id="m-tl"></div>
+  </div>
+</div>
+
+<script>
+const COLORS = { gray:'#5b6373', blue:'#3b82f6', indigo:'#6366f1', amber:'#f59e0b', purple:'#a855f7', red:'#ef4444', green:'#22c55e' };
+const PRIO = { highest:'#ef4444', high:'#f59e0b', medium:'#6c8cff', low:'#5b6373', lowest:'#5b6373' };
+const ACTIONS = { needs_decision:{a:'answer_adr',t:'Answer ADR ▸',c:'go'}, blocked:{a:'requeue',t:'Re-queue ▸',c:'go'}, in_review:{a:'approve',t:'Approve & merge ✓',c:'ok'} };
+
+function el(t,c,h){ const e=document.createElement(t); if(c)e.className=c; if(h!==undefined)e.innerHTML=h; return e; }
+
+function renderCards(ind){
+  const c=document.getElementById('cards'); c.innerHTML='';
+  const b=ind.budget, pct=Math.min(100,b.pct), bc=pct>90?COLORS.red:(pct>70?COLORS.amber:COLORS.green);
+  c.appendChild(el('div','card',`<div class="label">Monthly spend</div><div class="big">$${b.month_total.toFixed(2)}</div>
+    <div class="sub">of $${b.month_cap.toFixed(0)} cap · per-ticket $${b.per_ticket_cap.toFixed(0)}</div>
+    <div class="bar"><span style="width:${pct}%;background:${bc}"></span></div>`));
+  const q=ind.queue;
+  c.appendChild(el('div','card',`<div class="label">Queue</div><div class="mini">
+    <div><b>${q.ready}</b><br>ready</div><div><b>${q.flight}</b><br>in&nbsp;flight</div>
+    <div><b class="${q.dlq?'attn':''}">${q.dlq}</b><br>dead-letter</div></div>`));
+  const tk=ind.tokens;
+  c.appendChild(el('div','card',`<div class="label">Tokens · cache</div><div class="big">${tk.cache_hit_pct}%</div>
+    <div class="sub">cache hit · ${(tk.input/1000).toFixed(1)}k in / ${(tk.output/1000).toFixed(1)}k out</div>
+    <div class="bar"><span style="width:${tk.cache_hit_pct}%;background:${COLORS.blue}"></span></div>`));
+  const co=ind.counts;
+  c.appendChild(el('div','card',`<div class="label">Pipeline</div><div class="mini">
+    <div><b>${co.in_progress}</b><br>running</div><div><b>${co.in_review}</b><br>PRs open</div>
+    <div><b>${co.done}</b><br>done</div></div>`));
+  const ny=co.needs_decision+co.in_review+co.blocked;
+  c.appendChild(el('div','card',`<div class="label">Needs you</div><div class="big ${ny?'attn':''}">${ny}</div>
+    <div class="mini"><div><b class="${co.needs_decision?'attn':''}">${co.needs_decision}</b><br>decisions</div>
+    <div><b class="${co.blocked?'attn':''}">${co.blocked}</b><br>blocked</div><div><b>${co.in_review}</b><br>review</div></div>`));
+}
+
+function renderBoard(cols){
+  const board=document.getElementById('board'); board.innerHTML='';
+  for(const col of cols){
+    const cc=COLORS[col.color]||COLORS.gray;
+    const c=el('div','col');
+    c.appendChild(el('h2',null,`<span class="swatch" style="background:${cc}"></span>${col.label}<span class="cnt">${col.tickets.length}</span>`));
+    const body=el('div','body');
+    if(!col.tickets.length) body.appendChild(el('div','empty','—'));
+    for(const t of col.tickets){
+      const card=el('div','ticket'); card.style.borderLeftColor=cc;
+      card.onclick=()=>openTicket(t.key,t.summary);
+      const prio=PRIO[(t.priority||'medium').toLowerCase()]||COLORS.gray;
+      const labels=(t.labels||[]).map(l=>`<span class="chip ${/arch|hard/i.test(l)?'arch':''}">${l}</span>`).join('');
+      const cost=t.cost>0?`<span class="cost">$${t.cost.toFixed(2)}</span>`:'';
+      const assignee=t.assignee?`<span class="chip assignee">@${t.assignee.split('@')[0]}</span>`:'';
+      card.innerHTML=`<div class="top"><span class="prio" style="background:${prio}" title="${t.priority}"></span>
+        <span class="key">${t.key}</span>${cost}</div><div class="sum">${t.summary}</div>
+        <div class="meta">${assignee}${labels}</div>`;
+      const act=ACTIONS[col.key];
+      if(act){
+        const wrap=el('div','act '+act.c);
+        const btn=el('button',null,act.t);
+        btn.onclick=(e)=>{ e.stopPropagation(); doAction(act.a,t.key,btn); };
+        wrap.appendChild(btn); card.appendChild(wrap);
+      }
+      body.appendChild(card);
+    }
+    c.appendChild(body); board.appendChild(c);
+  }
+}
+
+function renderNotes(notes){
+  const n=document.getElementById('notes'); n.innerHTML='';
+  if(!notes||!notes.length){ n.appendChild(el('div','row','<span class="res">nothing needs you 🎉</span>')); return; }
+  for(const m of notes){
+    n.appendChild(el('div','row',`<span class="k">${m.ticket}</span> · ${m.kind.replace('_',' ')}<br><span style="color:var(--muted)">${m.message||''}</span>`));
+  }
+}
+
+function renderAudit(rows){
+  const a=document.getElementById('audit'); a.innerHTML='';
+  if(!rows.length){ a.appendChild(el('div','row','<span class="res">no calls yet</span>')); return; }
+  for(const r of rows){
+    a.appendChild(el('div','row',`<span class="t">${(r.ts||'').slice(11,19)}</span>
+      <span class="op">${r.service}.${r.operation}</span>
+      <span class="${r.allowed?'ok':'no'}">${r.allowed?'OK':'DENIED'}</span>
+      <span class="res">${r.ticket?('['+r.ticket+'] '):''}${r.result||''}</span>`));
+  }
+}
+
+function apply(s){
+  const mode=document.getElementById('mode');
+  mode.textContent=s.mock_mode?'MOCK':'LIVE'; mode.className='badge '+(s.mock_mode?'mock':'live');
+  document.getElementById('ts').textContent='updated '+(s.generated_at||'').slice(11,19);
+  renderCards(s.indicators); renderBoard(s.columns); renderNotes(s.notifications); renderAudit(s.audit);
+}
+
+async function doAction(action,key,btn){
+  btn.disabled=true; btn.textContent='…';
+  try{ await fetch('/api/action',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action,key})}); }catch(e){}
+  refreshOnce();
+}
+
+async function openTicket(key,summary){
+  document.getElementById('m-key').textContent=key;
+  document.getElementById('m-sum').textContent=summary||'';
+  document.getElementById('m-tl').innerHTML='<div class="empty">loading…</div>';
+  document.getElementById('overlay').classList.add('open');
+  try{
+    const r=await fetch('/api/ticket/'+key); const d=await r.json();
+    const tl=document.getElementById('m-tl'); tl.innerHTML='';
+    if(!d.stages||!d.stages.length){ tl.innerHTML='<div class="empty">no runs recorded yet</div>'; return; }
+    for(const s of d.stages){
+      const tok=(s.input_tokens||0)+(s.output_tokens||0)+(s.cache_read_tokens||0);
+      const row=el('div','stage',`<span class="nm">${s.stage}</span>
+        <span class="vd ${(s.verdict||'').toLowerCase()}">${s.verdict||'-'}</span>
+        ${s.model?`<span class="vd">${s.model}</span>`:''}
+        ${s.attempt?`<span class="vd">try ${s.attempt}</span>`:''}
+        <span class="gr">$${(s.cost_usd||0).toFixed(3)} · ${(tok/1000).toFixed(1)}k tok · ${s.duration_ms||0}ms</span>`);
+      tl.appendChild(row);
+      if(s.detail){ tl.appendChild(el('div',null,`<div style="color:var(--muted);font-size:12px;padding:0 0 6px 102px">${s.detail.replace(/</g,'&lt;')}</div>`)); }
+    }
+  }catch(e){ document.getElementById('m-tl').innerHTML='<div class="empty">failed to load</div>'; }
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeModal(); });
+
+async function refreshOnce(){
+  try{ const r=await fetch('/api/state'); apply(await r.json()); }
+  catch(e){ document.getElementById('ts').textContent='agent offline — retrying…'; }
+}
+
+// Prefer SSE; fall back to polling.
+function start(){
+  let usingSSE=false;
+  try{
+    const es=new EventSource('/api/stream');
+    es.onmessage=(e)=>{ usingSSE=true; try{ apply(JSON.parse(e.data)); }catch(_){} };
+    es.onerror=()=>{ es.close(); if(!usingSSE){ poll(); } };
+  }catch(e){ poll(); }
+  setTimeout(()=>{ if(!usingSSE) poll(); }, 4000);
+}
+let polling=false;
+function poll(){ if(polling)return; polling=true; refreshOnce(); setInterval(refreshOnce,3000); }
+refreshOnce(); start();
+</script>
+</body>
+</html>

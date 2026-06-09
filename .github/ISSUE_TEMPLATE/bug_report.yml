@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a problem with Quartermaster
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. cp example.env .env
+        2. docker compose up --build
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - "Mock mode (MOCK_MODE=true)"
+        - "Live mode (real Jira/GitHub/Claude)"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Output of `docker compose logs agent` (redact any secrets).
+      render: shell
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "OS, Docker version, Python version, Quartermaster version/commit"

@@ -1,0 +1,54 @@
+[project]
+name = "quartermaster"
+version = "0.1.0"
+description = "An autonomous, secure coding agent that turns issue-tracker tickets into reviewed pull requests, driven by the Claude CLI — with a Secrets Broker so the model never holds a key."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Hamza BEKOURY" }]
+keywords = ["ai-agent", "claude", "coding-agent", "jira", "autonomous", "devops", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+    "redis>=5.0",
+    "requests>=2.31",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "fakeredis>=2.21",
+    "responses>=0.25",
+]
+otel = [
+    "opentelemetry-sdk>=1.25",
+    "opentelemetry-exporter-otlp-proto-http>=1.25",
+]
+
+[project.urls]
+Homepage = "https://github.com/REPLACE_ME/quartermaster"
+Repository = "https://github.com/REPLACE_ME/quartermaster"
+Issues = "https://github.com/REPLACE_ME/quartermaster/issues"
+
+[project.scripts]
+quartermaster = "quartermaster.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["quartermaster*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
