@@ -1,7 +1,7 @@
 # Quartermaster — control plane image.
 # Contains the deterministic Python orchestrator (poller + queue worker +
 # Secrets Broker + budget ledger) and the Claude Code CLI it drives.
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
