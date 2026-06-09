@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "structural_issue", "summary"],
+  "properties": {
+    "status": { "type": "string", "enum": ["pass", "fail"] },
+    "structural_issue": { "type": "boolean" },
+    "meets_acceptance": { "type": "boolean" },
+    "findings": { "type": "array", "items": { "type": "string" } },
+    "summary": { "type": "string" },
+    "adrs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "context": { "type": "string" },
+          "options": { "type": "array", "items": { "type": "string" } },
+          "recommendation": { "type": "string" }
+        }
+      }
+    }
+  }
+}

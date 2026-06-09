@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary"],
+  "properties": {
+    "status": { "type": "string", "enum": ["done", "blocked", "needs_decision"] },
+    "files_changed": { "type": "array", "items": { "type": "string" } },
+    "diff": { "type": "string" },
+    "summary": { "type": "string" }
+  }
+}

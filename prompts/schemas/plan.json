@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "needs_architecture_decision", "summary"],
+  "properties": {
+    "status": { "type": "string", "enum": ["ok", "needs_decision", "blocked"] },
+    "needs_architecture_decision": { "type": "boolean" },
+    "plan": { "type": "string" },
+    "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+    "summary": { "type": "string" },
+    "adrs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "options", "recommendation"],
+        "properties": {
+          "title": { "type": "string" },
+          "context": { "type": "string" },
+          "options": { "type": "array", "items": { "type": "string" } },
+          "tradeoffs": { "type": "string" },
+          "recommendation": { "type": "string" }
+        }
+      }
+    }
+  }
+}

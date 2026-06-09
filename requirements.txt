@@ -1,0 +1,7 @@
+# Runtime dependencies for Quartermaster.
+# Pinned loosely; the Dockerfile installs these into the image.
+redis>=5.0
+requests>=2.31
+pydantic>=2.6
+pydantic-settings>=2.2
+python-dotenv>=1.0

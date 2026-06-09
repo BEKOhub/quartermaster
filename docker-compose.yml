@@ -1,0 +1,79 @@
+# Quartermaster — local stack.
+#
+#   cp example.env .env        # then edit (MOCK_MODE=true works out of the box)
+#   docker compose up --build  # single-process agent (role=all) + redis + dashboard
+#
+# Scale-out (production-like): run poller/worker/dashboard as separate services,
+# with workers scaled horizontally — they share the Redis queue safely:
+#   docker compose --profile distributed up --build --scale worker=3
+# (Do NOT run the default `agent` and the distributed profile at the same time;
+#  the queue must have exactly one poller.)
+#
+# In MOCK_MODE=true everything is faked, so the full loop runs with no accounts.
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---- single-process default (role=all) ------------------------------------
+  agent:
+    build: .
+    env_file: [.env]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      ROLE: all
+    ports:
+      - "8000:8000"        # dashboard -> http://localhost:8000
+    depends_on:
+      redis: { condition: service_healthy }
+    volumes:
+      - agent-data:/workspace/data
+      - agent-worktrees:/workspace/worktrees
+      # Mount your real target-repo checkout for non-mock runs:
+      # - /path/to/your-repo:/workspace/repo
+    restart: unless-stopped
+
+  # ---- distributed profile: poller + N workers + dashboard ------------------
+  poller:
+    profiles: ["distributed"]
+    build: .
+    env_file: [.env]
+    environment: { REDIS_URL: redis://redis:6379/0, ROLE: poller }
+    depends_on: { redis: { condition: service_healthy } }
+    volumes: [agent-data:/workspace/data]
+    restart: unless-stopped
+
+  worker:
+    profiles: ["distributed"]
+    build: .
+    env_file: [.env]
+    environment: { REDIS_URL: redis://redis:6379/0, ROLE: worker }
+    depends_on: { redis: { condition: service_healthy } }
+    volumes:
+      - agent-data:/workspace/data
+      - agent-worktrees:/workspace/worktrees
+    restart: unless-stopped
+
+  dashboard:
+    profiles: ["distributed"]
+    build: .
+    env_file: [.env]
+    environment: { REDIS_URL: redis://redis:6379/0, ROLE: dashboard }
+    ports: ["8000:8000"]
+    depends_on: { redis: { condition: service_healthy } }
+    volumes: [agent-data:/workspace/data]
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  agent-data:
+  agent-worktrees:
