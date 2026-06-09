@@ -26,7 +26,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "fakeredis>=2.21",
+    "fakeredis>=2.36.1",
     "responses>=0.25",
 ]
 otel = [
