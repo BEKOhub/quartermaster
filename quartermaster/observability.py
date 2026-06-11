@@ -68,12 +68,19 @@ class Observability:
                     input_tokens INTEGER DEFAULT 0,
                     output_tokens INTEGER DEFAULT 0,
                     cache_read_tokens INTEGER DEFAULT 0,
+                    cache_write_tokens INTEGER DEFAULT 0,
                     duration_ms INTEGER DEFAULT 0,
                     attempt INTEGER DEFAULT 0,
                     detail TEXT,
                     ts TEXT NOT NULL
                 )""")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_ticket ON runs(ticket_key)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_ts ON runs(ts)")
+            # Idempotent: add cache_write_tokens to existing databases.
+            try:
+                conn.execute("ALTER TABLE runs ADD COLUMN cache_write_tokens INTEGER DEFAULT 0")
+            except Exception:
+                pass  # column already exists
 
     # --- recording --------------------------------------------------------
     def record_stage(self, *, ticket_key: str, stage: str, model: str = "",
@@ -83,19 +90,32 @@ class Observability:
         cost = r.cost_usd if r else 0.0
         intok = r.input_tokens if r else 0
         outtok = r.output_tokens if r else 0
-        cache = r.cache_read_tokens if r else 0
+        cache_read = r.cache_read_tokens if r else 0
+        cache_write = r.cache_write_tokens if r else 0
         dur = duration_ms or (r.duration_ms if r else 0)
         with self._lock, self._conn() as conn:
             conn.execute(
                 """INSERT INTO runs (ticket_key, stage, model, verdict, cost_usd,
-                       input_tokens, output_tokens, cache_read_tokens, duration_ms,
-                       attempt, detail, ts)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (ticket_key, stage, model, verdict, cost, intok, outtok, cache, dur,
-                 attempt, detail, datetime.now(timezone.utc).isoformat()))
+                       input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+                       duration_ms, attempt, detail, ts)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (ticket_key, stage, model, verdict, cost, intok, outtok,
+                 cache_read, cache_write, dur, attempt, detail,
+                 datetime.now(timezone.utc).isoformat()))
         if self._tracer is not None:
             self._emit_span(ticket_key, stage, model, verdict, cost, intok, outtok,
-                            cache, dur, attempt)
+                            cache_read, dur, attempt)
+
+    def prune(self, keep_days: int = 90) -> int:
+        """Delete run records older than keep_days. Returns rows deleted."""
+        from datetime import timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=keep_days)).isoformat()
+        with self._lock, self._conn() as conn:
+            cur = conn.execute("DELETE FROM runs WHERE ts < ?", (cutoff,))
+            deleted = cur.rowcount
+        if deleted:
+            log.info("pruned %s run records older than %s days", deleted, keep_days)
+        return deleted
 
     def _emit_span(self, ticket, stage, model, verdict, cost, intok, outtok,
                    cache, dur, attempt) -> None:
@@ -138,14 +158,16 @@ class Observability:
                           COALESCE(SUM(cost_usd),0) AS cost,
                           COALESCE(SUM(input_tokens),0) AS intok,
                           COALESCE(SUM(output_tokens),0) AS outtok,
-                          COALESCE(SUM(cache_read_tokens),0) AS cache
+                          COALESCE(SUM(cache_read_tokens),0) AS cache_read,
+                          COALESCE(SUM(cache_write_tokens),0) AS cache_write
                    FROM runs""").fetchone()
-            billed = (row["intok"] or 0) + (row["cache"] or 0)
+            billed = (row["intok"] or 0) + (row["cache_read"] or 0)
             return {
                 "stages": row["stages"],
                 "cost_usd": round(row["cost"], 4),
                 "input_tokens": row["intok"],
                 "output_tokens": row["outtok"],
-                "cache_read_tokens": row["cache"],
-                "cache_hit_ratio": round((row["cache"] / billed) if billed else 0.0, 3),
+                "cache_read_tokens": row["cache_read"],
+                "cache_write_tokens": row["cache_write"],
+                "cache_hit_ratio": round((row["cache_read"] / billed) if billed else 0.0, 3),
             }

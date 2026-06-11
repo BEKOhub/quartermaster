@@ -7,10 +7,16 @@ sharing the live broker / queue / budget / observability store.
   GET  /api/stream        -> Server-Sent Events: pushes state ~every 2s
   POST /api/action        -> {action, key}: requeue | answer_adr | approve
 
+Authentication: if DASHBOARD_TOKEN is set, every request must supply it via
+  - query param:  ?token=<value>
+  - header:       Authorization: Bearer <value>
+
 Runs in background threads; stops when the shutdown event is set.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import threading
@@ -18,6 +24,7 @@ import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from .budget import BudgetLedger
 from .config import Settings
@@ -92,7 +99,7 @@ class DashboardState:
                 "counts": counts,
             },
             "audit": self._recent_audit(),
-            "notifications": list(reversed(self.notifier.sent[-12:])),
+            "notifications": list(reversed(list(self.notifier.sent)[-12:])),
         }
 
     def timeline(self, key: str) -> dict[str, Any]:
@@ -144,7 +151,15 @@ class DashboardState:
         return {"ok": False, "error": f"unknown action {action}"}
 
 
-def _make_handler(state: DashboardState, html: str):
+def _check_token(token: str, request_token: str) -> bool:
+    """Constant-time token comparison to prevent timing attacks."""
+    return hmac.compare_digest(
+        hashlib.sha256(token.encode()).digest(),
+        hashlib.sha256(request_token.encode()).digest(),
+    )
+
+
+def _make_handler(state: DashboardState, html: str, token: str = ""):
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code, body: bytes, ctype: str, extra=None) -> None:
             self.send_response(code)
@@ -155,23 +170,48 @@ def _make_handler(state: DashboardState, html: str):
             self.end_headers()
             self.wfile.write(body)
 
+        def _authed(self) -> bool:
+            """Return True if the request is authenticated (or no token is required)."""
+            if not token:
+                return True
+            # Check Authorization: Bearer <token> header.
+            auth = self.headers.get("Authorization", "")
+            if auth.startswith("Bearer ") and _check_token(token, auth[7:].strip()):
+                return True
+            # Check ?token= query param.
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            req_token = (params.get("token") or [""])[0]
+            if req_token and _check_token(token, req_token):
+                return True
+            return False
+
         def do_GET(self):  # noqa: N802
-            if self.path in ("/", "/index.html"):
-                self._send(200, html.encode(), "text/html; charset=utf-8")
-            elif self.path.startswith("/api/state"):
-                self._json(state.build())
-            elif self.path.startswith("/api/ticket/"):
-                key = self.path.rsplit("/", 1)[-1]
-                self._json(state.timeline(key))
-            elif self.path.startswith("/api/stream"):
-                self._stream()
-            elif self.path in ("/healthz", "/health"):
+            # Health check is always unauthenticated.
+            if self.path in ("/healthz", "/health"):
                 self._send(200, b'{"status":"ok"}', "application/json")
+                return
+            if not self._authed():
+                self._send(401, b'{"error":"unauthorized"}', "application/json")
+                return
+            path = urlparse(self.path).path
+            if path in ("/", "/index.html"):
+                self._send(200, html.encode(), "text/html; charset=utf-8")
+            elif path.startswith("/api/state"):
+                self._json(state.build())
+            elif path.startswith("/api/ticket/"):
+                key = path.rsplit("/", 1)[-1]
+                self._json(state.timeline(key))
+            elif path.startswith("/api/stream"):
+                self._stream()
             else:
                 self._send(404, b"not found", "text/plain")
 
         def do_POST(self):  # noqa: N802
-            if not self.path.startswith("/api/action"):
+            if not self._authed():
+                self._send(401, b'{"error":"unauthorized"}', "application/json")
+                return
+            if not urlparse(self.path).path.startswith("/api/action"):
                 self._send(404, b"not found", "text/plain")
                 return
             try:
@@ -195,12 +235,19 @@ def _make_handler(state: DashboardState, html: str):
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Connection", "keep-alive")
             self.end_headers()
+            # No hard cap — reconnect is client's responsibility.
+            # Send a keep-alive comment every 30s so proxies don't time out.
+            last_keepalive = time.monotonic()
             try:
-                for _ in range(600):  # ~20 min cap per connection
+                while True:
                     data = json.dumps(state.build())
                     self.wfile.write(f"data: {data}\n\n".encode())
                     self.wfile.flush()
                     time.sleep(2)
+                    if time.monotonic() - last_keepalive > 30:
+                        self.wfile.write(b": keepalive\n\n")
+                        self.wfile.flush()
+                        last_keepalive = time.monotonic()
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
@@ -218,7 +265,7 @@ def serve_dashboard(settings: Settings, broker, queue, budget: BudgetLedger,
     except OSError:
         html = "<h1>dashboard.html missing</h1>"
     state = DashboardState(settings, broker, queue, budget, obs, notifier)
-    handler = _make_handler(state, html)
+    handler = _make_handler(state, html, token=settings.dashboard_token)
     httpd = ThreadingHTTPServer(("0.0.0.0", settings.dashboard_port), handler)
 
     def _run():

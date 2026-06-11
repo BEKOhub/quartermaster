@@ -5,6 +5,7 @@ a dead-lettered job marks its ticket Blocked.
 """
 from __future__ import annotations
 
+import random
 import threading
 import time
 
@@ -16,6 +17,9 @@ from .pipeline import Pipeline
 from .queue import JobQueue
 
 log = get_logger("worker")
+
+_IDLE_BACKOFF_BASE = 1.0
+_IDLE_BACKOFF_JITTER = 0.5  # ±jitter so multiple workers don't thunderherd-wake
 
 
 class WorkerPool:
@@ -39,14 +43,15 @@ class WorkerPool:
 
     def join(self) -> None:
         for t in self._threads:
-            t.join()
+            t.join(timeout=10)
 
     def _loop(self, stop_event: threading.Event, idx: int) -> None:
         log.info("worker-%s online", idx)
         while not stop_event.is_set():
             job = self.queue.claim(now=self._clock())
             if job is None:
-                stop_event.wait(1.0)  # idle backoff
+                jitter = random.uniform(-_IDLE_BACKOFF_JITTER, _IDLE_BACKOFF_JITTER)
+                stop_event.wait(_IDLE_BACKOFF_BASE + jitter)
                 continue
             self._process(job)
         log.info("worker-%s offline", idx)
@@ -63,6 +68,8 @@ class WorkerPool:
             log.info("%s -> %s (cost $%.2f)", job.ticket_key, result.outcome.value,
                      result.cost_usd)
             self.queue.ack(job)
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as e:  # pipeline blew up — let the queue retry / DLQ
             log.exception("pipeline error on %s", job.ticket_key)
             disposition = self.queue.fail(job, now=self._clock(), error=str(e))
@@ -70,10 +77,19 @@ class WorkerPool:
                 self._dead_letter(job, str(e))
 
     def _dead_letter(self, job, error: str) -> None:
-        try:
-            self.broker.comment(job.ticket_key,
-                                f"⛔ Failed after {self.s.job_max_attempts} attempts: {error[:300]}")
-            self.broker.set_status(job.ticket_key, Status.BLOCKED)
-            self.broker.assign_to_boss(job.ticket_key)
-        except Exception:
-            log.exception("could not mark %s Blocked after dead-letter", job.ticket_key)
+        steps = [
+            ("comment", lambda: self.broker.comment(
+                job.ticket_key,
+                f"⛔ Failed after {self.s.job_max_attempts} attempts: {error[:300]}")),
+            ("set_status_blocked", lambda: self.broker.set_status(
+                job.ticket_key, Status.BLOCKED)),
+            ("assign_to_boss", lambda: self.broker.assign_to_boss(job.ticket_key)),
+        ]
+        for name, fn in steps:
+            try:
+                fn()
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except Exception:
+                log.exception("dead-letter step %s failed for %s — continuing", name,
+                              job.ticket_key)

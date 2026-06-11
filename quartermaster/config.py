@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     # --- dashboard --------------------------------------------------------
     dashboard_enabled: bool = Field(default=True, alias="DASHBOARD_ENABLED")
     dashboard_port: int = Field(default=8000, alias="DASHBOARD_PORT")
+    dashboard_token: str = Field(default="", alias="DASHBOARD_TOKEN")
 
     # --- budget -----------------------------------------------------------
     budget_db_path: str = Field(default="/workspace/data/ledger.db", alias="BUDGET_DB_PATH")
@@ -109,6 +110,13 @@ class Settings(BaseSettings):
     # --- context/cost (Tier 4) --------------------------------------------
     repo_map_enabled: bool = Field(default=True, alias="REPO_MAP_ENABLED")
     repo_map_max_files: int = Field(default=400, alias="REPO_MAP_MAX_FILES")
+
+    # --- pipeline tuning --------------------------------------------------
+    claude_timeout_seconds: int = Field(default=1800, alias="CLAUDE_TIMEOUT_SECONDS")
+    build_output_max_chars: int = Field(default=3000, alias="BUILD_OUTPUT_MAX_CHARS")
+
+    # --- observability retention ------------------------------------------
+    runs_retention_days: int = Field(default=90, alias="RUNS_RETENTION_DAYS")
 
     # --- notifications / role (Tier 2 / Tier 5) ---------------------------
     notify_webhook_url: str = Field(default="", alias="NOTIFY_WEBHOOK_URL")

@@ -80,13 +80,14 @@ class ClaudeRunner:
         log.info("claude %s stage=%s model=%s session=%s",
                  "resume" if spec.resume else "new", spec.stage, spec.model, spec.session_id)
         start = time.monotonic()
+        timeout = self.s.claude_timeout_seconds
         try:
             proc = subprocess.run(
-                argv, cwd=spec.cwd, capture_output=True, text=True, timeout=1800,
+                argv, cwd=spec.cwd, capture_output=True, text=True, timeout=timeout,
             )
         except subprocess.TimeoutExpired:
             return ClaudeResult(session_id=spec.session_id, cost_usd=0.0,
-                                error="claude CLI timed out")
+                                error=f"claude CLI timed out after {timeout}s")
         dur_ms = int((time.monotonic() - start) * 1000)
         if proc.returncode != 0:
             return ClaudeResult(session_id=spec.session_id, cost_usd=0.0,
@@ -101,6 +102,7 @@ class ClaudeRunner:
         try:
             data: dict[str, Any] = json.loads(stdout)
         except json.JSONDecodeError as e:
+            log.debug("unparseable CLI output (first 500 chars): %s", stdout[:500])
             return ClaudeResult(session_id=fallback_session, cost_usd=0.0,
                                 error=f"unparseable CLI output: {e}")
         structured = data.get("structured_output") or {}

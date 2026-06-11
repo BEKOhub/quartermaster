@@ -54,19 +54,33 @@ class JobQueue:
 
     # --- enqueue ----------------------------------------------------------
     def enqueue(self, job: Job, *, now: float) -> bool:
-        """Add a job unless its ticket is already active. Returns True if added."""
-        if self.r.sismember(self.k_dedupe, job.ticket_key):
-            return False
+        """Add a job unless its ticket is already active. Returns True if added.
+
+        Uses WATCH/MULTI/EXEC to prevent a race between dedupe-check and zadd.
+        Retries up to 3 times on WATCH conflict (optimistic locking).
+        """
         if not job.id:
             job.id = uuid.uuid4().hex
         job.enqueued_at = now
         score = job.priority * 1e12 + now
-        pipe = self.r.pipeline()
-        pipe.zadd(self.k_ready, {json.dumps(job.to_dict()): score})
-        pipe.sadd(self.k_dedupe, job.ticket_key)
-        pipe.execute()
-        log.info("enqueued %s (prio=%s id=%s)", job.ticket_key, job.priority, job.id)
-        return True
+
+        for _ in range(3):
+            with self.r.pipeline() as pipe:
+                try:
+                    pipe.watch(self.k_dedupe)
+                    if pipe.sismember(self.k_dedupe, job.ticket_key):
+                        pipe.reset()
+                        return False
+                    pipe.multi()
+                    pipe.zadd(self.k_ready, {json.dumps(job.to_dict()): score})
+                    pipe.sadd(self.k_dedupe, job.ticket_key)
+                    pipe.execute()
+                    log.info("enqueued %s (prio=%s id=%s)", job.ticket_key, job.priority, job.id)
+                    return True
+                except redis.WatchError:
+                    continue  # another writer changed dedupe set; retry
+        log.warning("enqueue %s abandoned after watch conflicts", job.ticket_key)
+        return False
 
     # --- claim / ack ------------------------------------------------------
     def claim(self, *, now: float) -> Optional[Job]:
@@ -110,16 +124,38 @@ class JobQueue:
     # --- reaper -----------------------------------------------------------
     def reap_expired(self, *, now: float) -> int:
         """Re-queue jobs whose worker died (visibility deadline passed)."""
+        import random
         reaped = 0
         for job_id, raw in list(self.r.hgetall(self.k_flight).items()):
             entry = json.loads(raw)
             if entry["deadline"] <= now:
                 job = Job.from_dict(entry["job"])
                 self.r.hdel(self.k_flight, job_id)
-                self.r.zadd(self.k_ready, {json.dumps(job.to_dict()): job.priority * 1e12 + now})
+                # Jitter the re-queue score so reaped jobs don't all pile up at the
+                # same priority tier and trigger simultaneous worker wake-ups.
+                jitter = random.uniform(0, 60)
+                self.r.zadd(self.k_ready, {json.dumps(job.to_dict()): job.priority * 1e12 + now + jitter})
                 reaped += 1
                 log.warning("reaped stuck job %s -> re-queued", job.ticket_key)
         return reaped
+
+    # --- DLQ consumption -------------------------------------------------
+    def process_dlq(self, handler) -> int:
+        """Drain dead-lettered jobs and call handler(job, error) for each.
+
+        Returns the number of items processed. This must be called periodically
+        (e.g. from the poller loop) so dead-lettered jobs don't accumulate silently.
+        """
+        processed = 0
+        for entry in self.drain_dlq():
+            try:
+                job = Job.from_dict(entry["job"])
+                error = entry.get("error", "")
+                handler(job, error)
+                processed += 1
+            except Exception:
+                log.exception("dlq handler failed for entry %s", entry)
+        return processed
 
     # --- introspection ----------------------------------------------------
     def stats(self) -> dict[str, int]:

@@ -7,15 +7,47 @@ name the workflow transitions clearly — no hard-coded IDs.
 from __future__ import annotations
 
 import base64
+import time
 from typing import Optional
 
 import requests
+from requests.exceptions import HTTPError, RequestException
 
 from ...config import Settings
 from ...logging_setup import get_logger
 from ...models import Status, Ticket
 
 log = get_logger("jira")
+
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
+_MAX_RETRIES = 3
+_BACKOFF_BASE = 2.0  # seconds; doubled on each retry
+
+
+def _with_retry(fn, *args, **kwargs):
+    """Call fn(*args, **kwargs), retrying on transient HTTP/network errors."""
+    delay = _BACKOFF_BASE
+    for attempt in range(_MAX_RETRIES):
+        try:
+            resp = fn(*args, **kwargs)
+            if resp.status_code in _RETRY_STATUSES:
+                if attempt == _MAX_RETRIES - 1:
+                    resp.raise_for_status()
+                log.warning("jira %s attempt %s/%s — retrying in %.0fs",
+                            resp.url, attempt + 1, _MAX_RETRIES, delay)
+                time.sleep(delay)
+                delay *= 2
+                continue
+            resp.raise_for_status()
+            return resp
+        except RequestException as exc:
+            if attempt == _MAX_RETRIES - 1:
+                raise
+            log.warning("jira request error attempt %s/%s: %s — retrying in %.0fs",
+                        attempt + 1, _MAX_RETRIES, exc, delay)
+            time.sleep(delay)
+            delay *= 2
+    raise RuntimeError("unreachable")
 
 # Map our logical Status -> the configured Jira status name.
 def status_name(settings: Settings, status: Status) -> str:
@@ -61,36 +93,43 @@ class RealJiraConnector:
     def _url(self, path: str) -> str:
         return f"{self.base}/rest/api/3{path}"
 
+    def _paginated_search(self, jql: str, page_size: int = 50) -> list[Ticket]:
+        """Fetch all matching issues across pages."""
+        fields = ["summary", "description", "status", "assignee", "priority", "labels"]
+        tickets, start_at = [], 0
+        while True:
+            resp = _with_retry(self.session.post, self._url("/search/jql"), json={
+                "jql": jql, "maxResults": page_size, "startAt": start_at, "fields": fields,
+            })
+            data = resp.json()
+            issues = data.get("issues", [])
+            tickets.extend(self._to_ticket(i) for i in issues)
+            start_at += len(issues)
+            if start_at >= data.get("total", 0) or not issues:
+                break
+        return tickets
+
     def search_todo(self) -> list[Ticket]:
         jql = (
             f'project = "{self.s.jira_project_key}" '
             f'AND assignee = "{self.s.jira_agent_email}" '
             f'AND status = "{self.s.jira_status_todo}" ORDER BY priority DESC, created ASC'
         )
-        resp = self.session.post(self._url("/search/jql"), json={
-            "jql": jql,
-            "maxResults": 50,
-            "fields": ["summary", "description", "status", "assignee", "priority", "labels"],
-        })
-        resp.raise_for_status()
-        return [self._to_ticket(issue) for issue in resp.json().get("issues", [])]
+        return self._paginated_search(jql)
 
     def get_ticket(self, key: str) -> Optional[Ticket]:
-        resp = self.session.get(self._url(f"/issue/{key}"))
-        if resp.status_code == 404:
-            return None
-        resp.raise_for_status()
+        try:
+            resp = _with_retry(self.session.get, self._url(f"/issue/{key}"))
+        except HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                return None
+            raise
         return self._to_ticket(resp.json())
 
     def board(self) -> list[Ticket]:
         """All tickets in the project (every status) for the dashboard."""
         jql = f'project = "{self.s.jira_project_key}" ORDER BY created DESC'
-        resp = self.session.post(self._url("/search/jql"), json={
-            "jql": jql, "maxResults": 100,
-            "fields": ["summary", "description", "status", "assignee", "priority", "labels"],
-        })
-        resp.raise_for_status()
-        return [self._to_ticket(issue) for issue in resp.json().get("issues", [])]
+        return self._paginated_search(jql, page_size=100)
 
     def comment(self, key: str, body: str) -> None:
         payload = {
@@ -100,23 +139,23 @@ class RealJiraConnector:
                              "content": [{"type": "text", "text": body}]}],
             }
         }
-        self.session.post(self._url(f"/issue/{key}/comment"), json=payload).raise_for_status()
+        _with_retry(self.session.post, self._url(f"/issue/{key}/comment"), json=payload)
 
     def transition(self, key: str, status_name: str) -> None:
-        resp = self.session.get(self._url(f"/issue/{key}/transitions"))
-        resp.raise_for_status()
+        resp = _with_retry(self.session.get, self._url(f"/issue/{key}/transitions"))
         transitions = resp.json().get("transitions", [])
-        match = next((t for t in transitions if t["to"]["name"].lower() == status_name.lower()
+        match = next((t for t in transitions
+                      if t["to"]["name"].lower() == status_name.lower()
                       or t["name"].lower() == status_name.lower()), None)
         if not match:
             raise RuntimeError(f"no transition to '{status_name}' on {key}; "
                                f"available: {[t['name'] for t in transitions]}")
-        self.session.post(self._url(f"/issue/{key}/transitions"),
-                          json={"transition": {"id": match["id"]}}).raise_for_status()
+        _with_retry(self.session.post, self._url(f"/issue/{key}/transitions"),
+                    json={"transition": {"id": match["id"]}})
 
     def assign(self, key: str, account_id: str) -> None:
-        self.session.put(self._url(f"/issue/{key}/assignee"),
-                         json={"accountId": account_id or None}).raise_for_status()
+        _with_retry(self.session.put, self._url(f"/issue/{key}/assignee"),
+                    json={"accountId": account_id or None})
 
     def _to_ticket(self, issue: dict) -> Ticket:
         f = issue.get("fields", {})

@@ -47,19 +47,21 @@ class RepoMap:
 
     # --- internals --------------------------------------------------------
     def _signature(self) -> str:
-        """Cheap fingerprint: newest mtime + file count of tracked code files."""
-        newest = 0.0
-        count = 0
+        """Fingerprint: sorted (path, mtime) pairs so file additions AND deletions
+        both change the signature, unlike the previous count+newest approach."""
+        entries = []
         for root, dirs, files in os.walk(self.repo_path):
-            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
-            for f in files:
+            dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS)
+            for f in sorted(files):
                 if os.path.splitext(f)[1] in _CODE_EXT:
-                    count += 1
+                    fpath = os.path.join(root, f)
+                    rel = os.path.relpath(fpath, self.repo_path)
                     try:
-                        newest = max(newest, os.path.getmtime(os.path.join(root, f)))
+                        mtime = int(os.path.getmtime(fpath))
                     except OSError:
-                        pass
-        return hashlib.sha1(f"{count}:{int(newest)}".encode()).hexdigest()[:12]
+                        mtime = 0
+                    entries.append(f"{rel}:{mtime}")
+        return hashlib.sha1("\n".join(entries).encode()).hexdigest()[:16]
 
     def _build(self) -> str:
         files: list[str] = []
@@ -87,11 +89,17 @@ class RepoMap:
         try:
             proc = subprocess.run(
                 ["rg", "-n", r"^(class |def |func |function |export (class|function|const) )",
-                 "--max-count", "3", "-g", "!*test*"],
+                 "--max-count", "5", "-g", "!*test*", "-g", "!*.min.*"],
                 cwd=self.repo_path, capture_output=True, text=True, timeout=20)
-        except (FileNotFoundError, subprocess.SubprocessError):
+        except FileNotFoundError:
+            return []  # rg not available
+        except subprocess.TimeoutExpired:
+            log.warning("repomap: rg timed out collecting symbols")
+            return []
+        except subprocess.SubprocessError as e:
+            log.debug("repomap: rg error: %s", e)
             return []
         out = []
-        for line in proc.stdout.splitlines()[:200]:
-            out.append("  " + line.strip()[:140])
+        for line in proc.stdout.splitlines()[:300]:
+            out.append("  " + line.strip()[:160])
         return out
