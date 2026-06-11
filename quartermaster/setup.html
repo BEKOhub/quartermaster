@@ -105,8 +105,37 @@ When you're done, click <b>Save .env</b> or download the file and place it in th
 <section>
   <div class="sh"><div class="step" id="step-gh">1</div><h2>GitHub</h2></div>
   <div class="body">
+
+    <!-- OAuth device-flow (shown when GITHUB_OAUTH_CLIENT_ID is configured) -->
+    <div id="gh-oauth-block" style="display:none">
+      <button class="primary" style="width:100%;justify-content:center;display:flex;gap:8px;align-items:center"
+              onclick="startDeviceFlow()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        Connect via GitHub
+      </button>
+      <!-- device flow pending state -->
+      <div id="gh-device-pending" style="display:none;margin-top:14px">
+        <div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:18px;text-align:center">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Open this URL and enter the code below</div>
+          <a id="gh-device-url" href="#" target="_blank" style="font-size:13px;font-weight:600">
+            github.com/login/device ↗
+          </a>
+          <div id="gh-device-code"
+               style="margin:14px auto;font-size:32px;font-weight:800;letter-spacing:.25em;
+                      color:var(--accent);font-family:ui-monospace,monospace"></div>
+          <div style="font-size:12px;color:var(--muted)" id="gh-device-hint">Waiting for authorization…</div>
+        </div>
+        <button class="sm" style="margin-top:8px;width:100%" onclick="cancelDeviceFlow()">Cancel</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:12px">
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+        or paste a token manually
+        <div style="flex:1;height:1px;background:var(--line)"></div>
+      </div>
+    </div>
+
     <div class="field">
-      <label class="lbl">Fine-grained Personal Access Token</label>
+      <label class="lbl" id="gh-pat-label">Fine-grained Personal Access Token</label>
       <div class="row">
         <input type="password" id="gh-token" placeholder="github_pat_…">
         <button onclick="verifyGH()">Verify</button>
@@ -290,6 +319,73 @@ function hide(id) { document.getElementById(id).style.display = 'none'; }
 async function post(path, body) {
   const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   return r.json();
+}
+
+// ── GitHub Device Flow ────────────────────────────────────────────
+let _devicePollTimer = null;
+let _deviceCode = null;
+let _deviceInterval = 5;
+
+async function startDeviceFlow() {
+  cancelDeviceFlow();
+  setStatus('gh-status', 'spin', '⋯ Starting…');
+  try {
+    const d = await post('/api/setup/github/device-start', {});
+    if (!d.ok) { setStatus('gh-status', 'err', '✗ ' + d.error); return; }
+    _deviceCode = d.device_code;
+    _deviceInterval = d.interval || 5;
+
+    document.getElementById('gh-device-code').textContent = d.user_code;
+    const link = document.getElementById('gh-device-url');
+    link.href = d.verification_uri;
+    link.textContent = d.verification_uri.replace('https://', '') + ' ↗';
+    show('gh-device-pending');
+    setStatus('gh-status', 'spin', '⋯ Waiting for GitHub authorization…');
+
+    // Open the verification page automatically.
+    window.open(d.verification_uri, '_blank');
+
+    // Poll until authorized or expired.
+    _devicePollTimer = setInterval(pollDeviceFlow, _deviceInterval * 1000);
+    // Expire UI when the code expires.
+    setTimeout(() => {
+      if (_deviceCode) {
+        cancelDeviceFlow();
+        setStatus('gh-status', 'err', '✗ Code expired — try again');
+      }
+    }, (d.expires_in || 900) * 1000);
+  } catch(e) { setStatus('gh-status', 'err', '✗ ' + e.message); }
+}
+
+async function pollDeviceFlow() {
+  if (!_deviceCode) return;
+  try {
+    const d = await post('/api/setup/github/device-poll', {device_code: _deviceCode});
+    if (d.slow_down) {
+      _deviceInterval += 5;
+      clearInterval(_devicePollTimer);
+      _devicePollTimer = setInterval(pollDeviceFlow, _deviceInterval * 1000);
+      return;
+    }
+    if (d.pending) return; // still waiting
+    cancelDeviceFlow();
+    if (!d.ok) { setStatus('gh-status', 'err', '✗ ' + d.error); return; }
+    // Success — fill in the token and trigger the normal verify flow.
+    document.getElementById('gh-token').value = d.token || '';
+    setStatus('gh-status', 'ok',
+      `✓ Authorized as <b>${d.user}</b>${d.name ? ' · ' + d.name : ''} &nbsp;·&nbsp; ${(d.repos||[]).length} repos`);
+    const sel = document.getElementById('gh-repo');
+    sel.innerHTML = (d.repos || []).map(r => `<option value="${r}">${r}</option>`).join('');
+    if (window._existing && window._existing.GITHUB_REPO) sel.value = window._existing.GITHUB_REPO;
+    show('gh-extra');
+    markStep('step-gh', true);
+  } catch(e) { /* network hiccup — keep polling */ }
+}
+
+function cancelDeviceFlow() {
+  if (_devicePollTimer) { clearInterval(_devicePollTimer); _devicePollTimer = null; }
+  _deviceCode = null;
+  hide('gh-device-pending');
 }
 
 // ── GitHub verification ───────────────────────────────────────────
@@ -489,6 +585,14 @@ async function prefill() {
     if (!d.ok) return;
     const v = d.values || {};
     window._existing = v;
+
+    // Show the OAuth button block if the server has a GitHub OAuth App configured.
+    if (d.has_oauth_app) {
+      show('gh-oauth-block');
+      // Make the PAT label less prominent when OAuth is available.
+      const lbl = document.getElementById('gh-pat-label');
+      if (lbl) lbl.textContent = 'Or paste a Personal Access Token manually';
+    }
 
     const fill = (id, key) => {
       const el = document.getElementById(id);

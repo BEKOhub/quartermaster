@@ -68,7 +68,16 @@ def _setup_load_env() -> dict:
                 "GH_TOKEN", "DASHBOARD_TOKEN", "NOTIFY_WEBHOOK_URL",
                 "STRIPE_API_KEY", "AZURE_CLIENT_SECRET", "CLOUDFLARE_API_TOKEN"}
     masked = {k: ("***" if k in _SECRETS and v else v) for k, v in values.items()}
-    return {"ok": True, "values": masked, "path": env_path, "exists": os.path.exists(env_path)}
+    # Expose whether a GitHub OAuth App client_id is configured so the frontend
+    # can show the device-flow button without exposing the client_id itself.
+    oauth_client_id = os.environ.get("GITHUB_OAUTH_CLIENT_ID", values.get("GITHUB_OAUTH_CLIENT_ID", ""))
+    return {
+        "ok": True,
+        "values": masked,
+        "path": env_path,
+        "exists": os.path.exists(env_path),
+        "has_oauth_app": bool(oauth_client_id),
+    }
 
 
 def _setup_save_env(updates: dict) -> dict:
@@ -160,6 +169,65 @@ def _setup_validate_jira(url: str, email: str, token: str) -> dict:
         }
     except _req.RequestException as e:
         return {"ok": False, "error": str(e)}
+
+
+def _setup_github_device_start(client_id: str) -> dict:
+    """Kick off the GitHub Device Authorization Flow (RFC 8628).
+    Returns user_code + verification_uri so the user can authorize on github.com.
+    """
+    try:
+        resp = _req.post(
+            "https://github.com/login/device/code",
+            json={"client_id": client_id, "scope": "repo"},
+            headers={"Accept": "application/json"},
+            timeout=10,
+        )
+        if not resp.ok:
+            return {"ok": False, "error": f"GitHub returned {resp.status_code}"}
+        data = resp.json()
+        if "error" in data:
+            return {"ok": False, "error": data.get("error_description", data["error"])}
+        return {
+            "ok": True,
+            "device_code": data["device_code"],
+            "user_code": data["user_code"],
+            "verification_uri": data.get("verification_uri", "https://github.com/login/device"),
+            "expires_in": data.get("expires_in", 900),
+            "interval": max(data.get("interval", 5), 5),
+        }
+    except _req.RequestException as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _setup_github_device_poll(client_id: str, device_code: str) -> dict:
+    """Poll for the access token after the user authorises on github.com/login/device."""
+    try:
+        resp = _req.post(
+            "https://github.com/login/oauth/access_token",
+            json={
+                "client_id": client_id,
+                "device_code": device_code,
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+            },
+            headers={"Accept": "application/json"},
+            timeout=10,
+        )
+        if not resp.ok:
+            return {"ok": False, "pending": False, "error": f"Poll error ({resp.status_code})"}
+        data = resp.json()
+        if "access_token" in data:
+            # Token obtained — validate it and return user info.
+            token = data["access_token"]
+            user_info = _setup_validate_github(token)
+            return {"ok": True, "pending": False, "token": token, **user_info}
+        error = data.get("error", "unknown")
+        if error in ("authorization_pending", "slow_down"):
+            return {"ok": False, "pending": True,
+                    "slow_down": error == "slow_down"}
+        return {"ok": False, "pending": False,
+                "error": data.get("error_description", error)}
+    except _req.RequestException as e:
+        return {"ok": False, "pending": False, "error": str(e)}
 
 
 def _setup_jira_statuses(url: str, email: str, token: str, project: str) -> dict:
@@ -408,7 +476,22 @@ def _make_handler(state: DashboardState, html: str, token: str = ""):
                 except Exception:
                     self._json({"ok": False, "error": "invalid JSON body"}, code=400)
                     return
-                if path == "/api/setup/validate/github":
+                if path == "/api/setup/github/device-start":
+                    client_id = os.environ.get(
+                        "GITHUB_OAUTH_CLIENT_ID",
+                        _setup_load_env()["values"].get("GITHUB_OAUTH_CLIENT_ID", ""))
+                    if not client_id:
+                        self._json({"ok": False,
+                                    "error": "GITHUB_OAUTH_CLIENT_ID not configured"})
+                    else:
+                        self._json(_setup_github_device_start(client_id))
+                elif path == "/api/setup/github/device-poll":
+                    client_id = os.environ.get(
+                        "GITHUB_OAUTH_CLIENT_ID",
+                        _setup_load_env()["values"].get("GITHUB_OAUTH_CLIENT_ID", ""))
+                    self._json(_setup_github_device_poll(
+                        client_id, payload.get("device_code", "")))
+                elif path == "/api/setup/validate/github":
                     self._json(_setup_validate_github(payload.get("token", "")))
                 elif path == "/api/setup/validate/jira":
                     self._json(_setup_validate_jira(

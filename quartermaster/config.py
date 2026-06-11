@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     github_branch_prefix: str = Field(default="agent/", alias="GITHUB_BRANCH_PREFIX")
     repo_path: str = Field(default="/workspace/repo", alias="REPO_PATH")
     worktrees_path: str = Field(default="/workspace/worktrees", alias="WORKTREES_PATH")
+    # OAuth App client_id for the device-flow "Connect via GitHub" button in /setup.
+    # Register once at github.com/settings/developers → New OAuth App.
+    # Only the public client_id is needed; no client secret required for device flow.
+    github_oauth_client_id: str = Field(default="", alias="GITHUB_OAUTH_CLIENT_ID")
 
     # --- cloudflare / stripe / azure (held, least-privilege) --------------
     cloudflare_api_token: str = Field(default="", alias="CLOUDFLARE_API_TOKEN")
