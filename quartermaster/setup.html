@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Quartermaster — Setup</title>
+<style>
+:root {
+  --bg:#0f1117; --panel:#171a23; --panel2:#1e222e; --line:#2a2f3d;
+  --txt:#e6e9ef; --muted:#8b93a7; --accent:#6c8cff;
+  --gray:#5b6373; --blue:#3b82f6; --green:#22c55e; --red:#ef4444; --amber:#f59e0b;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,-apple-system,sans-serif;}
+a{color:var(--accent);text-decoration:none;}a:hover{text-decoration:underline;}
+code{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#1e222e;padding:2px 6px;border-radius:4px;}
+
+header{display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--line);
+  background:var(--panel);position:sticky;top:0;z-index:5;}
+header h1{font-size:17px;margin:0;font-weight:650;}
+header .sub{color:var(--muted);font-size:14px;}
+.spacer{flex:1;}
+header .nav-link{font-size:13px;color:var(--muted);}
+
+main{max-width:780px;margin:0 auto;padding:28px 24px 60px;}
+.intro{color:var(--muted);margin-bottom:24px;font-size:14px;line-height:1.6;}
+
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;margin-bottom:16px;overflow:hidden;}
+.sh{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;}
+.sh h2{margin:0;font-size:15px;font-weight:650;}
+.step{width:24px;height:24px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0;}
+.step.done{background:#10331f;border-color:var(--green);color:var(--green);}
+.body{padding:18px 20px;display:flex;flex-direction:column;gap:14px;}
+
+.field{display:flex;flex-direction:column;gap:6px;}
+label.lbl{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+input,select,textarea{
+  background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  color:var(--txt);padding:9px 12px;font-size:14px;font-family:inherit;width:100%;
+  outline:none;transition:border-color .15s;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);}
+input[type=password]{letter-spacing:.05em;}
+select option{background:var(--panel2);}
+.row{display:flex;gap:8px;}
+.row input,.row select{flex:1;}
+
+button{background:#27304a;border:1px solid var(--line);color:var(--txt);border-radius:8px;
+  padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
+  transition:border-color .15s,background .15s;}
+button:hover{border-color:var(--accent);background:#2d3857;}
+button:disabled{opacity:.5;cursor:not-allowed;}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+button.primary:hover{background:#5575e8;border-color:#5575e8;}
+button.sm{padding:6px 14px;font-size:12px;}
+
+.status{font-size:13px;min-height:18px;}
+.status.ok{color:var(--green);}
+.status.err{color:var(--red);}
+.status.spin{color:var(--muted);}
+
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+
+.radio-group{display:flex;flex-direction:column;gap:8px;}
+.radio-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:9px;cursor:pointer;transition:border-color .15s;}
+.radio-item:hover{border-color:var(--accent);}
+.radio-item input[type=radio]{margin-top:2px;width:auto;accent-color:var(--accent);}
+.ri-title{font-weight:600;font-size:13px;}
+.ri-sub{color:var(--muted);font-size:12px;margin-top:2px;}
+
+.hint{font-size:12px;color:var(--muted);}
+
+.status-grid{display:flex;flex-direction:column;gap:7px;}
+.status-row{display:flex;align-items:center;gap:8px;}
+.status-row .sk{font-size:11px;font-family:ui-monospace,Menlo,monospace;color:var(--muted);
+  min-width:230px;flex-shrink:0;}
+.status-row select{flex:1;}
+
+.actions{display:flex;gap:12px;margin-top:24px;}
+.result-box{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;}
+.result-box.ok{border-color:var(--green);}
+.result-box.err{border-color:var(--red);}
+.result-box h3{margin:0 0 8px;font-size:14px;}
+textarea.code{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#0a0c12;color:#c9d1d9;
+  height:180px;resize:vertical;margin-top:8px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🛰️ Quartermaster</h1>
+  <span class="sub">Setup Wizard</span>
+  <div class="spacer"></div>
+  <a class="nav-link" href="/">← Back to board</a>
+</header>
+
+<main>
+<p class="intro">Connect Quartermaster to your GitHub repository and Jira project.
+Credentials are validated live — repos and workflow statuses are auto-discovered.
+When you're done, click <b>Save .env</b> or download the file and place it in the project root.</p>
+
+<!-- ── 1. GitHub ──────────────────────────────────────────────── -->
+<section>
+  <div class="sh"><div class="step" id="step-gh">1</div><h2>GitHub</h2></div>
+  <div class="body">
+    <div class="field">
+      <label class="lbl">Fine-grained Personal Access Token</label>
+      <div class="row">
+        <input type="password" id="gh-token" placeholder="github_pat_…">
+        <button onclick="verifyGH()">Verify</button>
+      </div>
+      <div class="status" id="gh-status"></div>
+      <span class="hint">Needs <b>Contents</b> (R/W) + <b>Pull requests</b> (W) on the target repo.
+        <a href="https://github.com/settings/tokens?type=beta" target="_blank">Create token ↗</a></span>
+    </div>
+    <div id="gh-extra" style="display:none">
+      <div class="field" style="margin-bottom:14px">
+        <label class="lbl">Repository</label>
+        <select id="gh-repo"></select>
+      </div>
+      <div class="g2">
+        <div class="field">
+          <label class="lbl">Base branch</label>
+          <input id="gh-base" value="main">
+        </div>
+        <div class="field">
+          <label class="lbl">Branch prefix for agent work</label>
+          <input id="gh-prefix" value="agent/">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 2. Jira ───────────────────────────────────────────────── -->
+<section>
+  <div class="sh"><div class="step" id="step-jira">2</div><h2>Jira</h2></div>
+  <div class="body">
+    <div class="g2">
+      <div class="field">
+        <label class="lbl">Base URL</label>
+        <input id="jira-url" placeholder="https://yoursite.atlassian.net">
+      </div>
+      <div class="field">
+        <label class="lbl">Agent email</label>
+        <input id="jira-email" placeholder="agent@yourdomain.com">
+      </div>
+    </div>
+    <div class="field">
+      <label class="lbl">API token</label>
+      <div class="row">
+        <input type="password" id="jira-token" placeholder="Atlassian API token">
+        <button onclick="verifyJira()">Verify</button>
+      </div>
+      <div class="status" id="jira-status"></div>
+      <span class="hint">Generate at <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">id.atlassian.com ↗</a></span>
+    </div>
+    <div id="jira-extra" style="display:none">
+      <div class="g2" style="margin-bottom:14px">
+        <div class="field">
+          <label class="lbl">Project</label>
+          <select id="jira-project" onchange="loadStatuses()"></select>
+        </div>
+        <div class="field">
+          <label class="lbl">Your Jira account ID <span class="hint" style="text-transform:none;letter-spacing:0">(tickets escalate here)</span></label>
+          <input id="jira-boss" placeholder="auto-detected">
+        </div>
+      </div>
+      <div id="jira-statuses-wrap" style="display:none">
+        <label class="lbl" style="display:block;margin-bottom:8px">
+          Workflow status names
+          <span class="hint" style="text-transform:none;letter-spacing:0;font-weight:400"> — auto-detected, adjust if needed</span>
+        </label>
+        <div class="status-grid" id="jira-status-rows"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 3. Claude ─────────────────────────────────────────────── -->
+<section>
+  <div class="sh"><div class="step" id="step-claude">3</div><h2>Claude</h2></div>
+  <div class="body">
+    <div class="radio-group">
+      <label class="radio-item">
+        <input type="radio" name="claude-auth" value="oauth" checked onchange="toggleClaudeAuth()">
+        <div>
+          <div class="ri-title">OAuth token — Max plan <span class="hint" style="font-weight:400">(recommended)</span></div>
+          <div class="ri-sub">Run <code>claude setup-token</code> on your laptop. Uses your automated credit pool — no per-token billing.</div>
+        </div>
+      </label>
+      <label class="radio-item">
+        <input type="radio" name="claude-auth" value="apikey" onchange="toggleClaudeAuth()">
+        <div>
+          <div class="ri-title">API key — pay-as-you-go</div>
+          <div class="ri-sub">From <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. Charged per token.</div>
+        </div>
+      </label>
+    </div>
+    <div id="claude-oauth-field" class="field">
+      <label class="lbl">OAuth Token</label>
+      <input type="password" id="claude-oauth" placeholder="Paste token from: claude setup-token">
+    </div>
+    <div id="claude-apikey-field" class="field" style="display:none">
+      <label class="lbl">API Key</label>
+      <input type="password" id="claude-apikey" placeholder="sk-ant-…">
+    </div>
+  </div>
+</section>
+
+<!-- ── 4. Settings ───────────────────────────────────────────── -->
+<section>
+  <div class="sh"><div class="step" id="step-settings">4</div><h2>Settings</h2></div>
+  <div class="body">
+    <div class="g2">
+      <div class="field">
+        <label class="lbl">Per-ticket budget cap (USD)</label>
+        <input id="cfg-ticket" type="number" step="0.5" min="0.5" value="3">
+      </div>
+      <div class="field">
+        <label class="lbl">Monthly budget cap (USD)</label>
+        <input id="cfg-monthly" type="number" step="5" min="5" value="90">
+      </div>
+    </div>
+    <div class="field">
+      <label class="lbl">Build / test command <span class="hint" style="text-transform:none;letter-spacing:0;font-weight:400">— non-zero exit feeds failure back to implementer</span></label>
+      <input id="cfg-build" placeholder='pytest -q  ·  npm test  ·  make ci'>
+    </div>
+    <div class="g2">
+      <div class="field">
+        <label class="lbl">Dashboard token <span class="hint" style="text-transform:none;letter-spacing:0;font-weight:400">(leave empty = no auth)</span></label>
+        <input type="password" id="cfg-dash-token" placeholder="secret">
+      </div>
+      <div class="field">
+        <label class="lbl">Notification webhook <span class="hint" style="text-transform:none;letter-spacing:0;font-weight:400">(Slack / Telegram / Discord)</span></label>
+        <input id="cfg-webhook" placeholder="https://hooks.slack.com/…">
+      </div>
+    </div>
+    <div class="g3">
+      <div class="field">
+        <label class="lbl">Review panel votes</label>
+        <input id="cfg-votes" type="number" min="1" max="9" value="3">
+      </div>
+      <div class="field">
+        <label class="lbl">Max repair rounds</label>
+        <input id="cfg-repairs" type="number" min="0" max="10" value="2">
+      </div>
+      <div class="field">
+        <label class="lbl">Worker concurrency</label>
+        <input id="cfg-workers" type="number" min="1" max="8" value="1">
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="actions">
+  <button class="primary" onclick="saveEnv()">💾 Save .env</button>
+  <button onclick="downloadEnv()">⬇ Download .env</button>
+</div>
+<div id="result"></div>
+</main>
+
+<script>
+const STATUS_KEYS = [
+  ['JIRA_STATUS_TODO',           'To Do'],
+  ['JIRA_STATUS_QUEUED',         'Queued'],
+  ['JIRA_STATUS_IN_PROGRESS',    'In Progress'],
+  ['JIRA_STATUS_NEEDS_DECISION', 'Needs Decision'],
+  ['JIRA_STATUS_BLOCKED',        'Blocked'],
+  ['JIRA_STATUS_IN_REVIEW',      'In Review'],
+  ['JIRA_STATUS_DONE',           'Done'],
+];
+
+// ── Helpers ──────────────────────────────────────────────────────
+function setStatus(id, cls, html) {
+  const el = document.getElementById(id);
+  el.className = 'status ' + cls;
+  el.innerHTML = html;
+}
+function markStep(id, done) {
+  const el = document.getElementById(id);
+  el.classList.toggle('done', done);
+  if (done) el.textContent = '✓';
+}
+function show(id) { document.getElementById(id).style.display = ''; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+async function post(path, body) {
+  const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  return r.json();
+}
+
+// ── GitHub verification ───────────────────────────────────────────
+async function verifyGH() {
+  const token = document.getElementById('gh-token').value.trim();
+  if (!token) { setStatus('gh-status','err','✗ Enter a token first'); return; }
+  setStatus('gh-status','spin','⋯ Verifying…');
+  try {
+    const d = await post('/api/setup/validate/github', {token});
+    if (!d.ok) { setStatus('gh-status','err','✗ ' + d.error); return; }
+    setStatus('gh-status','ok', `✓ Authenticated as <b>${d.user}</b>${d.name ? ' · ' + d.name : ''} &nbsp;·&nbsp; ${d.repos.length} repos`);
+    const sel = document.getElementById('gh-repo');
+    sel.innerHTML = d.repos.map(r => `<option value="${r}">${r}</option>`).join('');
+    // Re-select previously loaded value if any
+    if (window._existing && window._existing.GITHUB_REPO) sel.value = window._existing.GITHUB_REPO;
+    show('gh-extra');
+    markStep('step-gh', true);
+  } catch(e) { setStatus('gh-status','err','✗ ' + e.message); }
+}
+
+// ── Jira verification ─────────────────────────────────────────────
+async function verifyJira() {
+  const url   = document.getElementById('jira-url').value.trim();
+  const email = document.getElementById('jira-email').value.trim();
+  const token = document.getElementById('jira-token').value.trim();
+  if (!url || !email || !token) { setStatus('jira-status','err','✗ Fill in URL, email, and token first'); return; }
+  setStatus('jira-status','spin','⋯ Connecting…');
+  try {
+    const d = await post('/api/setup/validate/jira', {url, email, token});
+    if (!d.ok) { setStatus('jira-status','err','✗ ' + d.error); return; }
+    setStatus('jira-status','ok',`✓ Connected as <b>${d.display_name}</b> &nbsp;·&nbsp; ${d.projects.length} projects`);
+    const sel = document.getElementById('jira-project');
+    sel.innerHTML = d.projects.map(p => `<option value="${p.key}">${p.key} — ${p.name}</option>`).join('');
+    if (window._existing && window._existing.JIRA_PROJECT_KEY) sel.value = window._existing.JIRA_PROJECT_KEY;
+    document.getElementById('jira-boss').value = d.account_id || '';
+    show('jira-extra');
+    markStep('step-jira', true);
+    loadStatuses();
+  } catch(e) { setStatus('jira-status','err','✗ ' + e.message); }
+}
+
+async function loadStatuses() {
+  const url     = document.getElementById('jira-url').value.trim();
+  const email   = document.getElementById('jira-email').value.trim();
+  const token   = document.getElementById('jira-token').value.trim();
+  const project = document.getElementById('jira-project').value;
+  if (!project) return;
+  show('jira-statuses-wrap');
+  document.getElementById('jira-status-rows').innerHTML = '<div class="hint">⋯ Fetching workflow statuses…</div>';
+  try {
+    const d = await post('/api/setup/jira-statuses', {url, email, token, project});
+    if (!d.ok) { document.getElementById('jira-status-rows').innerHTML = `<div class="status err">✗ ${d.error}</div>`; return; }
+    renderStatusRows(d.names, d.mapped);
+  } catch(e) {
+    document.getElementById('jira-status-rows').innerHTML = `<div class="status err">✗ ${e.message}</div>`;
+  }
+}
+
+function renderStatusRows(names, mapped) {
+  const c = document.getElementById('jira-status-rows');
+  c.innerHTML = '';
+  for (const [key, label] of STATUS_KEYS) {
+    const row = document.createElement('div');
+    row.className = 'status-row';
+    const sk = document.createElement('span');
+    sk.className = 'sk';
+    sk.textContent = key;
+    const sel = document.createElement('select');
+    sel.id = 'jst-' + key;
+    // Include all names plus the current mapped value if not in the list
+    const opts = new Set(names);
+    if (mapped[key]) opts.add(mapped[key]);
+    sel.innerHTML = [...opts].sort().map(n => `<option value="${n}" ${n === mapped[key] ? 'selected' : ''}>${n}</option>`).join('');
+    row.appendChild(sk);
+    row.appendChild(sel);
+    c.appendChild(row);
+  }
+}
+
+// ── Claude auth toggle ────────────────────────────────────────────
+function toggleClaudeAuth() {
+  const v = document.querySelector('input[name="claude-auth"]:checked').value;
+  document.getElementById('claude-oauth-field').style.display = v === 'oauth' ? '' : 'none';
+  document.getElementById('claude-apikey-field').style.display = v === 'apikey' ? '' : 'none';
+}
+
+// ── Collect all form values into env dict ─────────────────────────
+function collect() {
+  const v = {};
+  v.MOCK_MODE = 'false';
+
+  // GitHub
+  const ghTok = document.getElementById('gh-token').value.trim();
+  if (ghTok) v.GH_TOKEN = ghTok;
+  const ghRepo = document.getElementById('gh-repo').value;
+  if (ghRepo) v.GITHUB_REPO = ghRepo;
+  v.GITHUB_BASE_BRANCH = document.getElementById('gh-base').value.trim() || 'main';
+  v.GITHUB_BRANCH_PREFIX = document.getElementById('gh-prefix').value.trim() || 'agent/';
+
+  // Jira
+  const jUrl = document.getElementById('jira-url').value.trim();
+  if (jUrl) v.JIRA_BASE_URL = jUrl;
+  const jEmail = document.getElementById('jira-email').value.trim();
+  if (jEmail) v.JIRA_AGENT_EMAIL = jEmail;
+  const jTok = document.getElementById('jira-token').value.trim();
+  if (jTok) v.JIRA_API_TOKEN = jTok;
+  const jProj = document.getElementById('jira-project').value;
+  if (jProj) v.JIRA_PROJECT_KEY = jProj;
+  const jBoss = document.getElementById('jira-boss').value.trim();
+  if (jBoss) v.JIRA_BOSS_ACCOUNT_ID = jBoss;
+  for (const [key] of STATUS_KEYS) {
+    const el = document.getElementById('jst-' + key);
+    if (el && el.value) v[key] = el.value;
+  }
+
+  // Claude
+  const authType = document.querySelector('input[name="claude-auth"]:checked').value;
+  if (authType === 'oauth') {
+    const t = document.getElementById('claude-oauth').value.trim();
+    if (t) v.CLAUDE_CODE_OAUTH_TOKEN = t;
+  } else {
+    const t = document.getElementById('claude-apikey').value.trim();
+    if (t) v.ANTHROPIC_API_KEY = t;
+  }
+
+  // Settings
+  v.BUDGET_PER_TICKET_USD = document.getElementById('cfg-ticket').value || '3';
+  v.BUDGET_MONTHLY_USD    = document.getElementById('cfg-monthly').value || '90';
+  const build = document.getElementById('cfg-build').value.trim();
+  if (build) v.BUILD_TEST_COMMAND = build;
+  const dashTok = document.getElementById('cfg-dash-token').value.trim();
+  if (dashTok) v.DASHBOARD_TOKEN = dashTok;
+  const webhook = document.getElementById('cfg-webhook').value.trim();
+  if (webhook) v.NOTIFY_WEBHOOK_URL = webhook;
+  v.REVIEW_VOTES       = document.getElementById('cfg-votes').value || '3';
+  v.REVIEW_MAX_REPAIRS = document.getElementById('cfg-repairs').value || '2';
+  v.WORKER_CONCURRENCY = document.getElementById('cfg-workers').value || '1';
+
+  return v;
+}
+
+// ── Save to server ────────────────────────────────────────────────
+async function saveEnv() {
+  const values = collect();
+  const res = document.getElementById('result');
+  res.innerHTML = '';
+  try {
+    const d = await post('/api/setup/save', values);
+    if (d.ok) {
+      res.innerHTML = `<div class="result-box ok">
+        <h3>✓ Saved to <code>${d.path}</code></h3>
+        <p class="hint">Restart Quartermaster for changes to take effect:
+          <code>docker compose restart</code></p>
+      </div>`;
+    } else {
+      res.innerHTML = `<div class="result-box err">
+        <h3>✗ Could not write to disk: ${d.error}</h3>
+        <p class="hint">Copy the content below and save it as <code>.env</code> in the project root, then restart.</p>
+        <textarea class="code" readonly>${escHtml(d.content || '')}</textarea>
+        <button class="sm" style="margin-top:8px" onclick="copyCode()">Copy to clipboard</button>
+      </div>`;
+    }
+  } catch(e) {
+    res.innerHTML = `<div class="result-box err"><h3>✗ ${e.message}</h3></div>`;
+  }
+}
+
+// ── Download as file ──────────────────────────────────────────────
+function downloadEnv() {
+  const v = collect();
+  const lines = ['# Generated by Quartermaster Setup Wizard', ''];
+  for (const [k, val] of Object.entries(v)) lines.push(`${k}=${val}`);
+  const blob = new Blob([lines.join('\n') + '\n'], {type: 'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '.env';
+  a.click();
+}
+
+function copyCode() {
+  const t = document.querySelector('.code');
+  if (t) navigator.clipboard.writeText(t.value).then(() => {
+    const b = t.nextElementSibling;
+    if (b) { b.textContent = 'Copied ✓'; setTimeout(() => b.textContent = 'Copy to clipboard', 2000); }
+  });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Pre-fill from existing .env ───────────────────────────────────
+async function prefill() {
+  try {
+    const r = await fetch('/api/setup/load');
+    const d = await r.json();
+    if (!d.ok) return;
+    const v = d.values || {};
+    window._existing = v;
+
+    const fill = (id, key) => {
+      const el = document.getElementById(id);
+      if (el && v[key] && v[key] !== '***') el.value = v[key];
+    };
+    fill('jira-url',     'JIRA_BASE_URL');
+    fill('jira-email',   'JIRA_AGENT_EMAIL');
+    fill('jira-boss',    'JIRA_BOSS_ACCOUNT_ID');
+    fill('gh-base',      'GITHUB_BASE_BRANCH');
+    fill('gh-prefix',    'GITHUB_BRANCH_PREFIX');
+    fill('cfg-build',    'BUILD_TEST_COMMAND');
+    fill('cfg-webhook',  'NOTIFY_WEBHOOK_URL');
+    if (v.BUDGET_PER_TICKET_USD) document.getElementById('cfg-ticket').value  = v.BUDGET_PER_TICKET_USD;
+    if (v.BUDGET_MONTHLY_USD)    document.getElementById('cfg-monthly').value = v.BUDGET_MONTHLY_USD;
+    if (v.REVIEW_VOTES)          document.getElementById('cfg-votes').value   = v.REVIEW_VOTES;
+    if (v.REVIEW_MAX_REPAIRS)    document.getElementById('cfg-repairs').value = v.REVIEW_MAX_REPAIRS;
+    if (v.WORKER_CONCURRENCY)    document.getElementById('cfg-workers').value = v.WORKER_CONCURRENCY;
+  } catch(e) { /* not critical */ }
+}
+
+prefill();
+</script>
+</body>
+</html>
