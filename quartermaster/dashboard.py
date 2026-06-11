@@ -138,7 +138,10 @@ def _setup_validate_github(token: str) -> dict:
         rr = s.get("https://api.github.com/user/repos", timeout=10, params={
             "per_page": 100, "sort": "updated", "affiliation": "owner,collaborator",
         })
-        repos = [r["full_name"] for r in (rr.json() if rr.ok else []) if isinstance(r, dict)]
+        repos = [
+            {"name": r["full_name"], "private": r.get("private", False)}
+            for r in (rr.json() if rr.ok else []) if isinstance(r, dict) and "full_name" in r
+        ]
         return {"ok": True, "user": user.get("login", ""), "name": user.get("name", ""), "repos": repos}
     except _req.RequestException as e:
         return {"ok": False, "error": str(e)}

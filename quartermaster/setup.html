@@ -73,6 +73,27 @@ button.sm{padding:6px 14px;font-size:12px;}
 
 .hint{font-size:12px;color:var(--muted);}
 
+/* ── Repo picker ────────────────────────────────────────────── */
+.repo-picker{background:var(--panel2);border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+.repo-search{border:none !important;border-radius:0 !important;border-bottom:1px solid var(--line) !important;
+  background:transparent;padding:9px 12px 9px 32px;font-size:13px;width:100%;}
+.repo-search:focus{border-color:var(--accent) !important;}
+.repo-search-wrap{position:relative;}
+.repo-search-wrap::before{content:"🔍";position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  font-size:11px;pointer-events:none;opacity:.5;}
+.repo-list{max-height:215px;overflow-y:auto;}
+.repo-item{display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;
+  border-bottom:1px solid var(--line);transition:background .1s;}
+.repo-item:last-child{border-bottom:none;}
+.repo-item:hover{background:rgba(108,140,255,.06);}
+.repo-item.sel{background:rgba(108,140,255,.12);box-shadow:inset 3px 0 0 var(--accent);}
+.repo-item input[type=radio]{width:auto;margin:0;flex-shrink:0;accent-color:var(--accent);}
+.ri-name{font-size:13px;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.repo-vis{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:700;letter-spacing:.3px;flex-shrink:0;}
+.repo-vis.prv{background:#2a1a06;color:var(--amber);border:1px solid rgba(245,158,11,.3);}
+.repo-vis.pub{background:#0a2215;color:var(--green);border:1px solid rgba(34,197,94,.25);}
+.repo-empty{padding:18px 12px;font-size:13px;color:var(--muted);text-align:center;}
+
 .status-grid{display:flex;flex-direction:column;gap:7px;}
 .status-row{display:flex;align-items:center;gap:8px;}
 .status-row .sk{font-size:11px;font-family:ui-monospace,Menlo,monospace;color:var(--muted);
@@ -147,7 +168,14 @@ When you're done, click <b>Save .env</b> or download the file and place it in th
     <div id="gh-extra" style="display:none">
       <div class="field" style="margin-bottom:14px">
         <label class="lbl">Repository</label>
-        <select id="gh-repo"></select>
+        <div class="repo-picker">
+          <div class="repo-search-wrap">
+            <input id="gh-repo-search" class="repo-search" type="text"
+                   placeholder="Search repositories…" oninput="filterRepos(this.value)" autocomplete="off">
+          </div>
+          <div id="gh-repo-list" class="repo-list"></div>
+          <div id="gh-repo-empty" class="repo-empty" style="display:none">No repositories match your filter.</div>
+        </div>
       </div>
       <div class="g2">
         <div class="field">
@@ -321,6 +349,59 @@ async function post(path, body) {
   return r.json();
 }
 
+// ── Repo picker ──────────────────────────────────────────────────
+let _allRepos = [];   // [{name, private}]
+let _selectedRepo = '';
+
+function populateRepoPicker(repos, selected) {
+  // Normalise: accept both plain strings and {name, private} objects
+  _allRepos = (repos || []).map(r => typeof r === 'string' ? {name: r, priv: false} : {name: r.name, priv: !!r.private});
+  _selectedRepo = selected || '';
+  // If pre-selected repo not in list, leave blank (new token may have different scope)
+  if (_selectedRepo && !_allRepos.find(r => r.name === _selectedRepo)) _selectedRepo = '';
+  // Auto-select if only one repo
+  if (!_selectedRepo && _allRepos.length === 1) _selectedRepo = _allRepos[0].name;
+  document.getElementById('gh-repo-search').value = '';
+  renderRepoList('');
+}
+
+function filterRepos(q) {
+  renderRepoList(q.toLowerCase());
+}
+
+function renderRepoList(filter) {
+  const list = document.getElementById('gh-repo-list');
+  const empty = document.getElementById('gh-repo-empty');
+  const filtered = _allRepos.filter(r => r.name.toLowerCase().includes(filter));
+  if (filtered.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = filtered.map(r => {
+    const sel = r.name === _selectedRepo;
+    const vis = r.priv ? '<span class="repo-vis prv">private</span>' : '<span class="repo-vis pub">public</span>';
+    // Highlight the matched part in the name
+    let label = r.name;
+    if (filter) {
+      const i = r.name.toLowerCase().indexOf(filter);
+      if (i >= 0) label = r.name.slice(0,i) + '<b>' + r.name.slice(i, i+filter.length) + '</b>' + r.name.slice(i+filter.length);
+    }
+    return `<label class="repo-item${sel ? ' sel' : ''}" onclick="selectRepo(event,'${r.name.replace(/'/g,"\\'")}')">
+      <input type="radio" name="gh-repo-radio" value="${r.name}" ${sel ? 'checked' : ''}>
+      <span class="ri-name">${label}</span>
+      ${vis}
+    </label>`;
+  }).join('');
+}
+
+function selectRepo(evt, name) {
+  evt.preventDefault();
+  _selectedRepo = name;
+  renderRepoList(document.getElementById('gh-repo-search').value.toLowerCase());
+}
+
 // ── GitHub Device Flow ────────────────────────────────────────────
 let _devicePollTimer = null;
 let _deviceCode = null;
@@ -374,9 +455,7 @@ async function pollDeviceFlow() {
     document.getElementById('gh-token').value = d.token || '';
     setStatus('gh-status', 'ok',
       `✓ Authorized as <b>${d.user}</b>${d.name ? ' · ' + d.name : ''} &nbsp;·&nbsp; ${(d.repos||[]).length} repos`);
-    const sel = document.getElementById('gh-repo');
-    sel.innerHTML = (d.repos || []).map(r => `<option value="${r}">${r}</option>`).join('');
-    if (window._existing && window._existing.GITHUB_REPO) sel.value = window._existing.GITHUB_REPO;
+    populateRepoPicker(d.repos || [], window._existing && window._existing.GITHUB_REPO);
     show('gh-extra');
     markStep('step-gh', true);
   } catch(e) { /* network hiccup — keep polling */ }
@@ -397,10 +476,7 @@ async function verifyGH() {
     const d = await post('/api/setup/validate/github', {token});
     if (!d.ok) { setStatus('gh-status','err','✗ ' + d.error); return; }
     setStatus('gh-status','ok', `✓ Authenticated as <b>${d.user}</b>${d.name ? ' · ' + d.name : ''} &nbsp;·&nbsp; ${d.repos.length} repos`);
-    const sel = document.getElementById('gh-repo');
-    sel.innerHTML = d.repos.map(r => `<option value="${r}">${r}</option>`).join('');
-    // Re-select previously loaded value if any
-    if (window._existing && window._existing.GITHUB_REPO) sel.value = window._existing.GITHUB_REPO;
+    populateRepoPicker(d.repos, window._existing && window._existing.GITHUB_REPO);
     show('gh-extra');
     markStep('step-gh', true);
   } catch(e) { setStatus('gh-status','err','✗ ' + e.message); }
@@ -480,7 +556,7 @@ function collect() {
   // GitHub
   const ghTok = document.getElementById('gh-token').value.trim();
   if (ghTok) v.GH_TOKEN = ghTok;
-  const ghRepo = document.getElementById('gh-repo').value;
+  const ghRepo = _selectedRepo;
   if (ghRepo) v.GITHUB_REPO = ghRepo;
   v.GITHUB_BASE_BRANCH = document.getElementById('gh-base').value.trim() || 'main';
   v.GITHUB_BRANCH_PREFIX = document.getElementById('gh-prefix').value.trim() || 'agent/';
