@@ -62,12 +62,24 @@ distributed profile at the same time.
    `.claude/` config set into that repo so each `claude -p` run inherits the rules.
 4. **Jira:** create a dedicated agent account + API token, set up the workflow
    statuses (names must match the `JIRA_STATUS_*` vars), and set
-   `JIRA_BOSS_ACCOUNT_ID`.
+   `JIRA_BOSS_ACCOUNT_ID`. The poller paginates automatically — no `maxResults` cap.
 5. **GitHub:** a fine-grained PAT scoped to the repo (contents R/W, PRs write). Turn
    on branch protection on `main` (required review = you) — the agent opens PRs,
-   never merges.
+   never merges. If a branch already exists from a previous run, the PR is updated
+   rather than failing.
 6. Set `BUILD_TEST_COMMAND` to your real test/lint command.
-7. `docker compose up --build`.
+7. Optionally set `DASHBOARD_TOKEN` to protect the web UI with a bearer token.
+8. `docker compose up --build`.
+
+### Daily workflow
+
+1. Write a ticket in Jira. Assign it to the agent. Move it to `To Do`.
+2. Quartermaster picks it up within `POLL_INTERVAL_SECONDS` (default 2 min).
+3. If the planner hits an architecture decision it posts an ADR comment, moves the
+   ticket to `Needs Decision`, and re-assigns it to you. Answer in the comments,
+   move it back to `To Do` from the dashboard or Jira — it resumes.
+4. Otherwise the agent implements, scans, reviews, and opens a PR. Ticket moves to
+   `In Review`. You review and merge.
 
 ## Safety model
 

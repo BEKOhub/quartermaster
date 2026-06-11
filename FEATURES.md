@@ -32,12 +32,19 @@ end-to-end in mock mode.
   expected outcomes + total cost. Run it in CI to prevent regressions.
 
 ## Security (`quartermaster/scanner.py`, `quartermaster/broker/`)
-- **Output scanning** — the diff is scanned for secrets, outbound-network calls,
-  and a planted **canary token** before any PR; a hit blocks + escalates. This is
-  the prompt-injection firewall: even a hijacked run cannot ship.
-- **Secrets Broker** — the only key-holder; per-service DENY/PROPOSE policy + audit.
+- **Output scanning** — the diff is scanned before any PR opens; a hit blocks +
+  escalates. Patterns cover: AWS keys, Stripe/OpenAI secrets, GitHub tokens (classic,
+  OAuth, App), Slack tokens, private keys, Azure Storage connection strings, JWT
+  tokens (`eyJ...`), bash TCP redirects (`/dev/tcp/...`), and a planted **canary
+  token**. All with a `Severity` rating (`high`/`medium`/`low`) and false-positive
+  tuning (generic credential patterns require ≥16-char values).
+- **Secrets Broker** — the only key-holder; per-service DENY/PROPOSE policy + an
+  fsync-durable, size-rotating audit log.
 - **Guard hooks** — block `.env`, `main` pushes, and direct network calls inside
   the Claude sandbox. See [SECURITY.md](SECURITY.md).
+- **Dashboard auth** — set `DASHBOARD_TOKEN` to require a Bearer token on all
+  dashboard endpoints (action buttons, state API, SSE stream). Constant-time
+  comparison prevents timing attacks; the `/healthz` probe is always public.
 
 ## Context & cost (`quartermaster/repomap.py`, `quartermaster/budget.py`)
 - **Cached repo map** injected as a stable, prompt-cacheable prefix so the

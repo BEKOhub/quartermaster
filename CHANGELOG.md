@@ -6,6 +6,50 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Dashboard authentication** — set `DASHBOARD_TOKEN` to require a bearer token
+  on all dashboard endpoints; constant-time comparison; `/healthz` always public.
+- **Scanner severity levels** — every finding now carries a `Severity` enum
+  (`high`/`medium`/`low`). New patterns: Azure Storage connection strings, JWT
+  tokens, GitHub OAuth/App tokens, bash TCP redirect (`/dev/tcp/...`). Generic
+  credential regex tightened (≥16-char value required) to reduce false positives.
+- **Queue dedup race fix** — `enqueue()` now uses Redis `WATCH/MULTI/EXEC`
+  (optimistic locking) so concurrent workers can never claim the same ticket.
+- **DLQ processing** — `queue.process_dlq()` method added and wired into the
+  poller loop so dead-lettered jobs surface as warnings rather than accumulating.
+- **Jira pagination** — `search_todo` and `board` now paginate automatically;
+  projects with >50 tickets are no longer silently truncated.
+- **GitHub idempotent PR** — `open_pr` detects an existing open PR for the branch
+  and updates it instead of crashing on duplicate branch. New `update_pr()` and
+  `close_pr()` operations.
+- **Poller circuit breaker** — exponential backoff after consecutive failures
+  (threshold 3, max 8× interval) so a broken Jira/Redis isn't hammered every cycle.
+- **Observability**: `cache_write_tokens` now recorded per stage (was silently
+  dropped); `ts` index added; `prune(keep_days)` method for retention.
+- **Audit log durability** — `fsync` on every write; size-based rotation (default
+  50 MB, 3 backups kept).
+- **Config**: new variables `CLAUDE_TIMEOUT_SECONDS`, `BUILD_OUTPUT_MAX_CHARS`,
+  `RUNS_RETENTION_DAYS`, `DASHBOARD_TOKEN`.
+
+### Changed
+- **Worker**: bare `except Exception` replaced with specific pass-through for
+  `KeyboardInterrupt`/`SystemExit`; dead-letter recovery now handles each step
+  (comment / set_status / assign) independently so a partial failure doesn't
+  swallow the whole escalation; idle backoff has per-worker jitter.
+- **Connectors**: Jira and GitHub both use an `_with_retry()` helper with 3-attempt
+  exponential backoff for 429/5xx/network errors.
+- **Reaper**: re-queued jobs now get a score jitter so reaped tickets don't all
+  pile up at the same priority tier.
+- **RepoMap**: cache signature changed from `(count, max_mtime)` to a sorted
+  `(path, mtime)` SHA-1 hash — file deletions now correctly invalidate the cache.
+  Symbol extraction distinguishes `FileNotFoundError` from timeout.
+- **Worktree**: branch-already-exists handled on create; falls back to `rmtree`
+  when `git worktree remove` fails; origin remote verified before push.
+- **Notifier**: `sent` buffer changed from `list` to a bounded `deque`; webhook
+  timeout and retry count now configurable; transient errors retried with backoff.
+- **SSE stream**: replaced the hard 20-minute cap with an infinite loop + 30-second
+  keep-alive comments so browser connections survive long-lived agent runs.
+
 ## [0.1.0] - 2026-06-09
 
 Initial public release.
